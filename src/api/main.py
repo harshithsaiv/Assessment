@@ -4,14 +4,12 @@ from typing import List
 from uuid import UUID
 import logging
 
-# Import our setup
 from src.database.models import Base, Patient, Lab, ClinicalNote, Tag, note_tags
 from src.api.schemas import PatientCreate, PatientResponse, LabCreate, LabResponse, PillarPatientResponse
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-# --- Database Setup (Standard Dependency Pattern) ---
-# In a real app, this goes in src/database/session.py
+
 SQLALCHEMY_DATABASE_URL = "postgresql+pg8000://medisync_admin:secure_dev_password@localhost:5432/medisync"
 engine = create_engine(SQLALCHEMY_DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -23,7 +21,7 @@ def get_db():
     finally:
         db.close()
 
-# --- App Initialization ---
+
 app = FastAPI(
     title="Medisync Clinical Platform",
     description="API for ingesting and retrieving clinical data.",
@@ -31,7 +29,7 @@ app = FastAPI(
 )
 logger = logging.getLogger("uvicorn")
 
-# --- Endpoints ---
+
 
 @app.post("/patients", response_model=PatientResponse, status_code=status.HTTP_201_CREATED)
 def create_patient(patient: PatientCreate, db: Session = Depends(get_db)):
@@ -43,7 +41,6 @@ def create_patient(patient: PatientCreate, db: Session = Depends(get_db)):
     if existing:
         raise HTTPException(status_code=400, detail="Patient with this MRN already exists")
     
-    # Create ORM Object
     db_patient = Patient(**patient.model_dump())
     db.add(db_patient)
     db.commit()
@@ -56,7 +53,6 @@ def create_lab(lab: LabCreate, db: Session = Depends(get_db)):
     Ingests a lab result.
     Reasoning: Automatically calculates 'is_abnormal' flag if not provided (Business Logic).
     """
-    # Simple logic: If value > 100, flag as abnormal (Example logic)
     is_abnormal = False
     if lab.result_value and lab.result_value > 100.0:
         is_abnormal = True
@@ -77,8 +73,6 @@ def get_patient_labs(patient_id: UUID, db: Session = Depends(get_db)):
     """
     labs = db.query(Lab).filter(Lab.patient_id == patient_id).order_by(Lab.collected_at.desc()).all()
     if not labs:
-        # Note: Depending on requirements, empty list might be better than 404. 
-        # But 404 is standard if the patient doesn't exist.
         return []
     return labs
 
@@ -88,18 +82,16 @@ def get_patients_by_pillar(pillar: str, db: Session = Depends(get_db)):
     COMPLEX QUERY: Finds patients who belong to a specific clinical pillar (Tag).
     Join Path: Tag -> NoteTags -> Notes -> Patient
     """
-    # We use a case-insensitive search for the pillar/tag name
     results = (
         db.query(Patient)
         .join(ClinicalNote)
         .join(note_tags)
         .join(Tag)
-        .filter(Tag.name.ilike(pillar)) # ILIKE = Case Insensitive
-        .distinct() # A patient might have 10 notes with the same tag; show them once.
+        .filter(Tag.name.ilike(pillar)) 
+        .distinct()
         .all()
     )
     
-    # Map to simplified response model
     response_data = []
     for p in results:
         response_data.append({
